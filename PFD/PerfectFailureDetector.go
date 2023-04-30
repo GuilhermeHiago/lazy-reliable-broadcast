@@ -1,10 +1,17 @@
-package main
+/*
+  Construido como parte da disciplina: Sistemas Distribuidos - PUCRS - Escola Politecnica
+  Autores: Guilherme H C Santos & Victor Putrich
+  Modulo representando Perfect Failure Detector tal como definido em:
+    Introduction to Reliable and Secure Distributed Programming
+    Christian Cachin, Rachid Gerraoui, Luis Rodrigues
+  * Semestre 2023/1 - Primeira versao.
+*/
+package PerfectFailureDetector
 
 import (
 	"fmt"
 	"os"
 	"time"
-	"strconv"
 	"strings"
 	PP2PLink "SD/PP2PLink"
 )
@@ -19,6 +26,7 @@ type PerfectFailureDetector_Module struct {
 	failureAfter  int
 	address		  string
 	p2pLink       PP2PLink.PP2PLink
+	onCrashP	  chan string
 }
 
 func (module *PerfectFailureDetector_Module) outDbg(s string) {
@@ -28,7 +36,11 @@ func (module *PerfectFailureDetector_Module) outDbg(s string) {
 	}
 }
 
-func (module *PerfectFailureDetector_Module) InitD(peers []string, _dbg bool, failureAfter int, address string) {
+func (module *PerfectFailureDetector_Module) Init(peers []string, failureAfter int, address string, onCrashP chan string) {
+	module.InitD(peers, true, failureAfter, address, onCrashP)
+}
+
+func (module *PerfectFailureDetector_Module) InitD(peers []string, _dbg bool, failureAfter int, address string, onCrashP chan string) {
 	module.dbg = _dbg
 	module.peers = peers
 	module.alive = make(map[string]bool)
@@ -37,6 +49,7 @@ func (module *PerfectFailureDetector_Module) InitD(peers []string, _dbg bool, fa
 	module.timeout = make(chan int)
 	module.failureAfter = failureAfter
 	module.address = address
+	module.onCrashP = onCrashP
 
 	for _, peer := range peers {
 		module.alive[peer] = true
@@ -82,6 +95,7 @@ func (module *PerfectFailureDetector_Module) Start() {
 						if module.timeoutCounter[peer] >= 5 { // Check if the counter reached the threshold (5)
 							module.detected[peer] = true
 							module.outDbg(fmt.Sprintf("Process %s failed", peer))
+							module.onCrashP <- peer
 						}
 					}
 				}
@@ -141,26 +155,26 @@ func (module *PerfectFailureDetector_Module) receiveHeartbeatMessage(msg PP2PLin
 	module.alive[from] = true
 }
 	
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage:   go run PerfectFailureDetector.go  failureAfter thisProcessIpAddress:port otherProcessIpAddress:port")
-		fmt.Println("Example: go run PerfectFailureDetector.go -1 127.0.0.1:8050 127.0.0.1:8051")
-		fmt.Println("Example: go run PerfectFailureDetector.go 2 127.0.0.1:8051 127.0.0.1:8050")
-		return
-	}
+// func main() {
+// 	if len(os.Args) < 3 {
+// 		fmt.Println("Usage:   go run PerfectFailureDetector.go  failureAfter thisProcessIpAddress:port otherProcessIpAddress:port")
+// 		fmt.Println("go run PerfectFailureDetector.go -1 127.0.0.1:5001 127.0.0.1:6001 127.0.0.1:7001")
+// 		fmt.Println("go run PerfectFailureDetector.go -1 127.0.0.1:6001 127.0.0.1:5001 127.0.0.1:7001")
+// 		fmt.Println("go run PerfectFailureDetector.go 5 127.0.0.1:7001 127.0.0.1:6001  127.0.0.1:5001")
+// 		return
+// 	}
 
-	failureAfter, err := strconv.Atoi(os.Args[1])
-	if err != nil {
-    	fmt.Println("Invalid failureAfter argument")
-    	return
-	}
+// 	failureAfter, err := strconv.Atoi(os.Args[1])
+// 	if err != nil {
+//     	fmt.Println("Invalid failureAfter argument")
+//     	return
+// 	}
 
-	peers := os.Args[2:] // Replace these with actual process IP:Port addresses
-	pfd := &PerfectFailureDetector_Module{}
+// 	peers := os.Args[2:] // Replace these with actual process IP:Port addresses
+// 	pfd := &PerfectFailureDetector_Module{}
 
 
+// 	pfd.InitD(peers, true, failureAfter, os.Args[2])
 
-	pfd.InitD(peers, true, failureAfter, os.Args[2])
-
-	time.Sleep(60 * time.Second)
-}
+// 	time.Sleep(30 * time.Second)
+// }
