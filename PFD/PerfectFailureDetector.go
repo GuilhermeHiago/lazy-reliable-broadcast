@@ -6,29 +6,40 @@
     Christian Cachin, Rachid Gerraoui, Luis Rodrigues
   * Semestre 2023/1 - Primeira versao.
 */
+
 package PerfectFailureDetector
+
+/*
+	Victor: alterar perfect failure para usar heartbeat request 
+*/
 
 import (
 	"fmt"
 	"os"
 	"time"
+	//"strconv"
 	"strings"
 	PP2PLink "SD/PP2PLink"
 )
 
 type PerfectFailureDetector_Module struct {
+	//Modules
+	p2pLink       PP2PLink.PP2PLink
+	
+	// args
 	alive         map[string]bool
 	detected      map[string]bool
-	timeoutCounter map[string]int
 	peers         []string
-	dbg           bool
 	timeout       chan int
+	
+	// implementation args
+	timeoutCounter map[string]int
 	failureAfter  int
+	heartbeat 	  chan int
 	address		  string
-	p2pLink       PP2PLink.PP2PLink
-	onCrashP	  chan string
+	Fail          chan string
+	dbg           bool
 }
-
 func (module *PerfectFailureDetector_Module) outDbg(s string) {
 	if module.dbg {
 		fmt.Println(". . . . . . . . . [ PFD msg : " + s + " ]")
@@ -36,21 +47,27 @@ func (module *PerfectFailureDetector_Module) outDbg(s string) {
 	}
 }
 
-func (module *PerfectFailureDetector_Module) Init(peers []string, failureAfter int, address string, onCrashP chan string) {
-	module.InitD(peers, true, failureAfter, address, onCrashP)
-}
-
-func (module *PerfectFailureDetector_Module) InitD(peers []string, _dbg bool, failureAfter int, address string, onCrashP chan string) {
+func (module *PerfectFailureDetector_Module) InitD(peers []string, _dbg bool, failureAfter int, address string) {
+	
+	
+	// Append port to the address
+	module.address = address + ":8000"
+	
+	module.peers = make([]string, len(peers)) // Fix this line to create a slice of strings
+	// Append port to each address in peers
+	for i, peer := range peers {
+		module.peers[i] = peer + ":8000" 
+	}
+	
 	module.dbg = _dbg
-	module.peers = peers
+	//module.peers = peers
 	module.alive = make(map[string]bool)
 	module.detected = make(map[string]bool)
 	module.timeoutCounter = make(map[string]int) // Add timeoutCounter map
 	module.timeout = make(chan int)
+	module.heartbeat = make(chan int)
 	module.failureAfter = failureAfter
-	module.address = address
-	module.onCrashP = onCrashP
-
+	module.Fail = make(chan string, len(peers))
 	for _, peer := range peers {
 		module.alive[peer] = true
 		module.detected[peer] = false
@@ -61,19 +78,26 @@ func (module *PerfectFailureDetector_Module) InitD(peers []string, _dbg bool, fa
 
 	module.p2pLink = PP2PLink.PP2PLink{
 		Req: make(chan PP2PLink.PP2PLink_Req_Message),
-		Ind: make(chan PP2PLink.PP2PLink_Ind_Message),
-	}
+		Ind: make(chan PP2PLink.PP2PLink_Ind_Message)}
+	module.p2pLink.Init(module.address)
 
-	module.p2pLink.InitD(address, _dbg)
+	module.outDbg("peers: " + strings.Join(peers, ", "));
+	module.outDbg("addr: " + address);
 	module.Start()
 }
 
 func (module *PerfectFailureDetector_Module) StartTimer() {
-	time.Sleep(1 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 	module.timeout <- 1
 }
 
+func (module *PerfectFailureDetector_Module) heartbeatTimer() {
+	time.Sleep(50 * time.Millisecond)
+	module.heartbeat <- 1
+}
+
 func (module *PerfectFailureDetector_Module) Start() {
+	go module.heartbeatTimer()
 	go module.StartTimer()
 
 	go func() {
@@ -88,24 +112,25 @@ func (module *PerfectFailureDetector_Module) Start() {
 					}
 				}
 
-				//module.outDbg("trigger heard")
 				for _, peer := range module.peers {
 					if !module.alive[peer] && !module.detected[peer] {
-						module.timeoutCounter[peer]++ // Increment timeoutCounter if the process is not alive and not detected
-						if module.timeoutCounter[peer] >= 5 { // Check if the counter reached the threshold (5)
+						module.timeoutCounter[peer]++
+						if module.timeoutCounter[peer] >= 2 {
+							peerAddress := strings.Split(peer, ":")[0]
 							module.detected[peer] = true
-							module.outDbg(fmt.Sprintf("Process %s failed", peer))
-							module.onCrashP <- peer
+							module.outDbg(fmt.Sprintf("Process %s failed", peerAddress))
+							module.Fail <- peerAddress // Notify failure
 						}
 					}
 				}
-
-				module.sendHeartbeatMessages()
-
 				//module.printPeers()
 				module.setAllNodesToFalse()
 				go module.StartTimer()
-
+			
+			case <-module.heartbeat:
+				module.sendHeartbeatMessages()
+				go module.heartbeatTimer()
+			
 			case indMsg := <-module.p2pLink.Ind:
 				module.receiveHeartbeatMessage(indMsg)
 			}
@@ -149,7 +174,7 @@ func (module *PerfectFailureDetector_Module) receiveHeartbeatMessage(msg PP2PLin
 	
     from := msgParts[1]
 	if from != module.address{
-    	module.outDbg(from)
+    	//module.outDbg(from)
 	}
 	//module.outDbg(from)
 	module.alive[from] = true
@@ -158,9 +183,8 @@ func (module *PerfectFailureDetector_Module) receiveHeartbeatMessage(msg PP2PLin
 // func main() {
 // 	if len(os.Args) < 3 {
 // 		fmt.Println("Usage:   go run PerfectFailureDetector.go  failureAfter thisProcessIpAddress:port otherProcessIpAddress:port")
-// 		fmt.Println("go run PerfectFailureDetector.go -1 127.0.0.1:5001 127.0.0.1:6001 127.0.0.1:7001")
-// 		fmt.Println("go run PerfectFailureDetector.go -1 127.0.0.1:6001 127.0.0.1:5001 127.0.0.1:7001")
-// 		fmt.Println("go run PerfectFailureDetector.go 5 127.0.0.1:7001 127.0.0.1:6001  127.0.0.1:5001")
+// 		fmt.Println("Example: go run PerfectFailureDetector.go -1 127.0.0.1:8050 127.0.0.1:8051")
+// 		fmt.Println("Example: go run PerfectFailureDetector.go 2 127.0.0.1:8051 127.0.0.1:8050")
 // 		return
 // 	}
 
@@ -174,7 +198,8 @@ func (module *PerfectFailureDetector_Module) receiveHeartbeatMessage(msg PP2PLin
 // 	pfd := &PerfectFailureDetector_Module{}
 
 
+
 // 	pfd.InitD(peers, true, failureAfter, os.Args[2])
 
-// 	time.Sleep(30 * time.Second)
+// 	time.Sleep(60 * time.Second)
 // }
