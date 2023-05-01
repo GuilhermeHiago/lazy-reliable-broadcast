@@ -7,11 +7,12 @@
   * Semestre 2018/2 - Primeira versao.  Estudantes:  Andre Antonitsch e Rafael Copstein
   Para uso vide ao final do arquivo, ou aplicacao chat.go que usa este
 */
-package BestEffortBroadcast
+package BEB
 
 import (
 	"fmt"
-
+	"time"
+	"os"
 	PP2PLink "SD/PP2PLink"
 )
 
@@ -30,6 +31,9 @@ type BestEffortBroadcast_Module struct {
 	Req      chan BestEffortBroadcast_Req_Message
 	Pp2plink PP2PLink.PP2PLink
 	dbg      bool
+
+	failAfter int
+	failSignal chan int
 }
 
 func (module *BestEffortBroadcast_Module) outDbg(s string) {
@@ -38,29 +42,46 @@ func (module *BestEffortBroadcast_Module) outDbg(s string) {
 	}
 }
 
-func (module *BestEffortBroadcast_Module) Init(address string) {
-	module.InitD(address, true)
+func (module *BestEffortBroadcast_Module) Init(address string, failAfter int) {
+	module.InitD(address, failAfter, true)
 }
 
-func (module *BestEffortBroadcast_Module) InitD(address string, _dbg bool) {
+func (module *BestEffortBroadcast_Module) InitD(address string, failAfter int, _dbg bool) {
 	module.dbg = _dbg
 	module.outDbg("Init BEB!")
+	
+	// Append port to the address
+	fulladdr := address + ":8001"
+	module.failAfter = failAfter
 	module.Pp2plink = PP2PLink.PP2PLink{
 		Req: make(chan PP2PLink.PP2PLink_Req_Message),
 		Ind: make(chan PP2PLink.PP2PLink_Ind_Message)}
-	module.Pp2plink.InitD(address, _dbg)
+	module.Pp2plink.Init(fulladdr)
+	module.failSignal = make(chan int)
 	module.Start()
 }
 
-func (module *BestEffortBroadcast_Module) Start() {
 
+func (module *BestEffortBroadcast_Module) Start() {
+	go func() {
+		for {
+			select {
+			case <-module.failSignal:
+				module.outDbg("process failed")
+				os.Exit(1)
+				break
+			}
+		}
+	}()
+	
 	go func() {
 		for {
 			select {
 			case y := <-module.Req:
-				module.Broadcast(y)
+				go module.Broadcast(y)
 			case y := <-module.Pp2plink.Ind:
-				module.Deliver(PP2PLink2BEB(y))
+				go module.Deliver(PP2PLink2BEB(y))
+			
 			}
 		}
 	}()
@@ -71,17 +92,29 @@ func (module *BestEffortBroadcast_Module) Broadcast(message BestEffortBroadcast_
 	// aqui acontece o envio um opara um, para cada processo destinatario
 	// em caso de injecao de falha no originador, no meio de um broadcast
 	// este loop deve ser interrompido, tendo a mensagem ido para alguns mas nao para todos processos
-
+	module.outDbg("sending message to broadcast")
 	for i := 0; i < len(message.Addresses); i++ {
+
+		time.Sleep(1 * time.Second)
 		msg := BEB2PP2PLink(message)
-		msg.To = message.Addresses[i]
+		msg.To = message.Addresses[i] + ":8001"
 		module.Pp2plink.Req <- msg
 		module.outDbg("Sent to " + message.Addresses[i])
+		/*
+			Esse código serve para garantir falha durante envio de broadcast
+		*/
+		if module.failAfter > 0{ 
+			module.failAfter -= 1
+			if module.failAfter == 0 {
+				module.failSignal <- 1
+			}
+		}
 	}
 }
 
 func (module *BestEffortBroadcast_Module) Deliver(message BestEffortBroadcast_Ind_Message) {
-
+	time.Sleep(2 * time.Second)
+	module.outDbg("message delivered: " + message.Message)
 	// fmt.Println("Received '" + message.Message + "' from " + message.From)
 	module.Ind <- message
 	// fmt.Println("# End BEB Received")

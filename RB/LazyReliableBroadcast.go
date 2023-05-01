@@ -26,29 +26,42 @@ type LazyReliableBroadcast_Module struct {
 	bestEffortBroadcast BEB.BestEffortBroadcast_Module
 	failureDetector   PFD.PerfectFailureDetector_Module
 	correctNodes      []string
+	From			  map[string][]string // # check duplicate
 	address			  string
+	failAfter		  int
 	dbg               bool
 }
 
-func (module *LazyReliableBroadcast_Module) outDbg(s string) {
+func contains(s []string, str string) bool {
+	for _, v := range s {
+		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+func (module *LazyReliableBroadcast_Module) outDbg(s string) { // # check duplicate: verification method
 	if module.dbg {
 		fmt.Println(". . [ LRB msg : " + s + " ]")
 	}
 }
 
-func (module *LazyReliableBroadcast_Module) Init(address string, peers []string) {
-	module.InitD(address, peers, true)
+func (module *LazyReliableBroadcast_Module) Init(address string, failAfter int, peers []string) {
+	module.InitD(address, failAfter, peers, true)
 }
 
-func (module *LazyReliableBroadcast_Module) InitD(address string, peers []string, _dbg bool) {
+func (module *LazyReliableBroadcast_Module) InitD(address string, failAfter int, peers []string, _dbg bool) {
 	module.dbg = _dbg
 	module.outDbg("Init LRB!")
 	module.address = address
+	module.failAfter = failAfter
+	module.From = make(map[string][]string) // # check duplicate: init var
 	
 	module.bestEffortBroadcast = BEB.BestEffortBroadcast_Module{
 		Req: make(chan BEB.BestEffortBroadcast_Req_Message),
 		Ind: make(chan BEB.BestEffortBroadcast_Ind_Message)}
-	module.bestEffortBroadcast.Init(address, 2) /* colocar o failafter passando como parâmetro no terminal */
+	module.bestEffortBroadcast.Init(address, module.failAfter) /* colocar o failafter passando como parâmetro no terminal */
 	
 	
 	module.failureDetector = PFD.PerfectFailureDetector_Module{
@@ -86,22 +99,28 @@ func (module *LazyReliableBroadcast_Module) Start() {
 
 			case y := <-module.bestEffortBroadcast.Ind:
 				originAddr := strings.Split(y.Message, ";")[0]
-				found := false
-				for _, node := range module.correctNodes {
-					if node == originAddr {
-						found = true
-						break
+
+				if !contains(module.From[originAddr], y.Message){ // # check duplicate: if
+
+					found := false
+					for _, node := range module.correctNodes {
+						if node == originAddr {
+							found = true
+							break
+						}
 					}
+					
+					if !found {
+						module.outDbg("origin failed: " + originAddr + " relaying message")
+						reqMessage := LazyReliableBroadcast_Req_Message{
+							Addresses: module.correctNodes,
+							Message:   originAddr + ";" + strings.Split(y.Message, ";")[1]}
+						module.Broadcast(reqMessage)
+					}
+
+					module.From[originAddr] = append(module.From[originAddr], y.Message) // # check duplicate: add to msg list
+					module.Deliver(BEB2LRB(y))
 				}
-				
-				if !found {
-					module.outDbg("origin failed: " + originAddr + " relaying message")
-					reqMessage := LazyReliableBroadcast_Req_Message{
-						Addresses: module.correctNodes,
-						Message:   module.address + ";" + strings.Split(y.Message, ";")[1]}
-					module.Broadcast(reqMessage)
-				}
-				module.Deliver(BEB2LRB(y))
 			}
 		}
 	}()
@@ -148,9 +167,9 @@ func removeNodeFromList(nodes []string, nodeToRemove string) []string {
 }
 
 /*
-	Victor: colocar passar failureAfter do BEB como argumento no terminal
-			colocar uma lista das mensagens recebidas para não duplicar no Lazy
-			remover a alteração da origem na mensagem quando fazer relay no Lazy
+	Victor: (só alterar scripts) colocar passar failureAfter do BEB como argumento no terminal
+			(feito) colocar uma lista das mensagens recebidas para não duplicar no Lazy
+			(feito) remover a alteração da origem na mensagem quando fazer relay no Lazy
 			alterar para usar heartbeat request no Failure Detector
 */
 func main() {
@@ -161,12 +180,18 @@ func main() {
 
 	address := os.Args[1]
 	peers := os.Args[2:]
+	failAfter := 2
+
+	// #TEMP: uncomment this to read from terminal (needs to change scripts)
+	// address := os.Args[1]
+	// failAfter := os.Args[2]
+	// peers := os.Args[3:]
 
 	chatModule := LazyReliableBroadcast_Module{
 		Ind: make(chan LazyReliableBroadcast_Ind_Message),
 		Req: make(chan LazyReliableBroadcast_Req_Message),
 	}
-	chatModule.InitD(address, peers, true)
+	chatModule.InitD(address, failAfter, peers, true)
 	
 	go func() {
 		for {
