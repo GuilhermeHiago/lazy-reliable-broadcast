@@ -5,6 +5,7 @@ import (
 	"bufio"
 	//"time"
 	"os"
+	// "sync"
 	"strings"
 	PFD "SD/PFD"
 	BEB "SD/BEB"
@@ -171,6 +172,7 @@ func removeNodeFromList(nodes []string, nodeToRemove string) []string {
 			(feito) colocar uma lista das mensagens recebidas para não duplicar no Lazy
 			(feito) remover a alteração da origem na mensagem quando fazer relay no Lazy
 			alterar para usar heartbeat request no Failure Detector
+			adicionar semaforo para operações no correctNodes
 */
 func main() {
 	if len(os.Args) < 3 {
