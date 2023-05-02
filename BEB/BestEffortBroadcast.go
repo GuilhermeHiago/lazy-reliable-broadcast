@@ -56,7 +56,7 @@ func (module *BestEffortBroadcast_Module) InitD(address string, failAfter int, _
 	module.Pp2plink = PP2PLink.PP2PLink{
 		Req: make(chan PP2PLink.PP2PLink_Req_Message),
 		Ind: make(chan PP2PLink.PP2PLink_Ind_Message)}
-	module.Pp2plink.Init(fulladdr)
+	module.Pp2plink.InitD(fulladdr, false)
 	module.failSignal = make(chan int)
 	module.Start()
 }

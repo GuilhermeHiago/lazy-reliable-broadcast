@@ -7,6 +7,7 @@ import (
 	"os"
 	// "sync"
 	"strings"
+	"strconv"
 	PFD "SD/PFD"
 	BEB "SD/BEB"
 )
@@ -180,14 +181,14 @@ func main() {
 		return
 	}
 
-	address := os.Args[1]
-	peers := os.Args[2:]
-	failAfter := 2
+	// address := os.Args[1]
+	// peers := os.Args[2:]
+	// failAfter := 2
 
 	// #TEMP: uncomment this to read from terminal (needs to change scripts)
-	// address := os.Args[1]
-	// failAfter := os.Args[2]
-	// peers := os.Args[3:]
+	failAfter, _ := strconv.Atoi(os.Args[1])
+	address := os.Args[2]
+	peers := os.Args[3:]
 
 	chatModule := LazyReliableBroadcast_Module{
 		Ind: make(chan LazyReliableBroadcast_Ind_Message),
