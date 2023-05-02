@@ -82,11 +82,23 @@ func (module *LazyReliableBroadcast_Module) InitD(address string, failAfter int,
 
 func (module *LazyReliableBroadcast_Module) Start() {
 	go func() {
+		// # event : Crash
 		for {
 			select {
+			// # case : Crash
 			case failedNode := <-module.failureDetector.Fail:
 				module.outDbg("added to suspect list: " + failedNode)
 				module.correctNodes = removeNodeFromList(module.correctNodes, failedNode)
+
+				for index, message := range module.From[failedNode]{
+					relayMessage := LazyReliableBroadcast_Req_Message{
+						Addresses: module.correctNodes,
+						Message: message}
+					
+					dbgMsg := fmt.Sprintf("Relay of %s: %d/%d", failedNode, index+1, len(module.From[failedNode]))
+					module.outDbg(dbgMsg)
+					module.Broadcast(relayMessage)
+				}
 			}
 		}
 	}()
@@ -103,6 +115,9 @@ func (module *LazyReliableBroadcast_Module) Start() {
 				originAddr := strings.Split(y.Message, ";")[0]
 
 				if !contains(module.From[originAddr], y.Message){ // # check duplicate: if
+
+					// fmt.Println("\n\n Nao contem")
+					// fmt.Println("Addr:", originAddr, " ->:", y.Message, " in: ", module.From[originAddr])
 
 					found := false
 					for _, node := range module.correctNodes {
@@ -169,7 +184,7 @@ func removeNodeFromList(nodes []string, nodeToRemove string) []string {
 }
 
 /*
-	Victor: (só alterar scripts) colocar passar failureAfter do BEB como argumento no terminal
+	Guilherme: (só alterar scripts) colocar passar failureAfter do BEB como argumento no terminal
 			(feito) colocar uma lista das mensagens recebidas para não duplicar no Lazy
 			(feito) remover a alteração da origem na mensagem quando fazer relay no Lazy
 			alterar para usar heartbeat request no Failure Detector
