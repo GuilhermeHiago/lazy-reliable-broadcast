@@ -82,7 +82,7 @@ func (module *PP2PLink) Start(address string) {
 					bufTam := make([]byte, 4) //       // le tamanho da mensagem
 					_, err := io.ReadFull(conn, bufTam)
 					if err != nil {
-						module.outDbg("erro : " + err.Error() + " conexao fechada pelo outro processo.")
+						//module.outDbg("erro : " + err.Error() + " conexao fechada pelo outro processo.")
 						break
 					}
 					tam, err := strconv.Atoi(string(bufTam))
@@ -139,11 +139,11 @@ func (module *PP2PLink) Send(message PP2PLink_Req_Message) {
 	_, err = fmt.Fprintf(conn, str)             // escreve 4 caracteres com tamanho
 	_, err = fmt.Fprintf(conn, message.Message) // escreve a mensagem com o tamanho calculado
 	if err != nil {
-		module.outDbg("erro : " + err.Error() + ". Conexao fechada. 1 tentativa de reabrir:")
+		//module.outDbg("erro : " + err.Error() + ". Conexao fechada. 1 tentativa de reabrir:")
 		conn, err = net.Dial("tcp", message.To)
 		if err != nil {
 			//fmt.Println(err)
-			module.outDbg("       " + err.Error())
+			//module.outDbg("       " + err.Error())
 			return
 		} else {
 			module.outDbg("ok   : conexao iniciada com outro processo.")

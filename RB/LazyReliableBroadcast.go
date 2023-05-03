@@ -127,6 +127,9 @@ func (module *LazyReliableBroadcast_Module) Start() {
 						}
 					}
 					
+					module.From[originAddr] = append(module.From[originAddr], y.Message) // # check duplicate: add to msg list
+					module.Deliver(BEB2LRB(y))
+
 					if !found {
 						module.outDbg("origin failed: " + originAddr + " relaying message")
 						reqMessage := LazyReliableBroadcast_Req_Message{
@@ -134,9 +137,6 @@ func (module *LazyReliableBroadcast_Module) Start() {
 							Message:   originAddr + ";" + strings.Split(y.Message, ";")[1]}
 						module.Broadcast(reqMessage)
 					}
-
-					module.From[originAddr] = append(module.From[originAddr], y.Message) // # check duplicate: add to msg list
-					module.Deliver(BEB2LRB(y))
 				}
 			}
 		}
