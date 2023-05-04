@@ -106,6 +106,7 @@ func (module *BestEffortBroadcast_Module) Broadcast(message BestEffortBroadcast_
 		if module.failAfter > 0{ 
 			module.failAfter -= 1
 			if module.failAfter == 0 {
+				time.Sleep(1 * time.Second)
 				module.failSignal <- 1
 			}
 		}
